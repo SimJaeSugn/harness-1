@@ -347,9 +347,17 @@ def _build_tooling(
     openai_client = config.get_openai_client()
 
     try:
-        from harness.rerank import BasetenReranker
+        _reranker_backend = getattr(args, "reranker", "baseten")
+        if _reranker_backend == "none":
+            reranker = None
+        elif _reranker_backend == "vllm":
+            from harness.rerank import VLLMQwen3Reranker
 
-        reranker = BasetenReranker(token_counter=text_token_counter, max_tokens=4096)
+            reranker = VLLMQwen3Reranker(token_counter=text_token_counter, max_tokens=4096)
+        else:
+            from harness.rerank import BasetenReranker
+
+            reranker = BasetenReranker(token_counter=text_token_counter, max_tokens=4096)
     except Exception:
         reranker = None
 
@@ -463,6 +471,13 @@ async def main() -> None:
         type=int,
         default=20,
         help="Serper preflight timeout in seconds for web/wiki datasets",
+    )
+    parser.add_argument(
+        "--reranker",
+        type=str,
+        default="baseten",
+        choices=["baseten", "vllm", "none"],
+        help="Reranker backend: baseten (original), vllm (local Qwen3-Reranker-8B drop-in), or none.",
     )
     args = parser.parse_args()
 

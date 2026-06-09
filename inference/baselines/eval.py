@@ -24,7 +24,7 @@ from harness.config import get_config
 from datagen.search_dataset import SearchDataset, get_dataset, DATASET_REGISTRY
 from harness.generate_search_sft import build_agent_factory, create_inference_model_factory
 from harness.prompts import get_retrieval_subagent_prompt
-from harness.rerank import BasetenReranker, ContextualReranker, Reranker
+from harness.rerank import BasetenReranker, ContextualReranker, Reranker, VLLMQwen3Reranker
 from harness.tasks import SearchTaskEvaluationOutput, SearchTaskOutput
 from harness.tools import ToolSet
 from harness.trajectory import Observation
@@ -434,8 +434,9 @@ def parse_args() -> argparse.Namespace:
         "--reranker",
         type=str,
         default="baseten",
-        choices=["baseten", "contextual"],
-        help="Reranker to use (default: baseten).",
+        choices=["baseten", "contextual", "vllm"],
+        help="Reranker to use (default: baseten). 'vllm' is a local "
+        "Qwen3-Reranker-8B served via vLLM (Baseten drop-in).",
     )
     parser.add_argument(
         "--search-display-limit",
@@ -485,6 +486,11 @@ def main() -> None:
     reranker: Reranker
     if args.reranker == "contextual":
         reranker = ContextualReranker(
+            token_counter=rerank_token_counter,
+            max_tokens=args.rerank_max_tokens,
+        )
+    elif args.reranker == "vllm":
+        reranker = VLLMQwen3Reranker(
             token_counter=rerank_token_counter,
             max_tokens=args.rerank_max_tokens,
         )

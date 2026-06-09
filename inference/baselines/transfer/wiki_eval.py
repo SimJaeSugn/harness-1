@@ -47,7 +47,7 @@ from openai_harmony import (
     load_harmony_encoding,
 )
 from harness.prompts import get_retrieval_subagent_prompt
-from harness.rerank import BasetenReranker
+from harness.rerank import BasetenReranker, VLLMQwen3Reranker
 from harness.tasks import SearchTaskOutput, SearchTaskEvaluationOutput, chunk_ids_to_doc_ids
 from harness.tools import (
     PruneChunksTool,
@@ -940,6 +940,13 @@ def parse_args() -> argparse.Namespace:
         help="Maximum tokens for reranker and ReadDocumentTool output.",
     )
     parser.add_argument(
+        "--reranker",
+        type=str,
+        default="baseten",
+        choices=["baseten", "vllm"],
+        help="Reranker backend: baseten (original) or vllm (local Qwen3-Reranker-8B drop-in).",
+    )
+    parser.add_argument(
         "--summary-only",
         action="store_true",
         default=False,
@@ -1091,10 +1098,16 @@ def main() -> None:
     config = get_config()
     tiktoken_encoding = tiktoken.get_encoding("o200k_harmony")
     rerank_token_counter = lambda text: len(tiktoken_encoding.encode(text))
-    reranker = BasetenReranker(
-        token_counter=rerank_token_counter,
-        max_tokens=args.rerank_max_tokens,
-    )
+    if getattr(args, "reranker", "baseten") == "vllm":
+        reranker = VLLMQwen3Reranker(
+            token_counter=rerank_token_counter,
+            max_tokens=args.rerank_max_tokens,
+        )
+    else:
+        reranker = BasetenReranker(
+            token_counter=rerank_token_counter,
+            max_tokens=args.rerank_max_tokens,
+        )
 
     # Create wiki toolset
     toolset = WikiToolSet.create(

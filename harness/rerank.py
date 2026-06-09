@@ -222,6 +222,100 @@ class BasetenReranker(Reranker):
         return results
 
 
+class VLLMQwen3Reranker(Reranker):
+    """Drop-in replacement for BasetenReranker backed by a local vLLM server.
+
+    Serves Qwen3-Reranker-8B locally via vLLM's /score endpoint (original
+    Qwen3-reranker sequence-classification conversion). The prompt template and
+    yes/no scoring match BasetenReranker exactly, so scores match the Baseten
+    deployment up to numerics — use it when the Baseten reranker deployment is
+    unavailable.
+
+    Server launch:
+        vllm serve Qwen/Qwen3-Reranker-8B --port 8011 \
+          --hf-overrides '{"architectures": ["Qwen3ForSequenceClassification"],
+                           "classifier_from_token": ["no", "yes"],
+                           "is_original_qwen3_reranker": true}'
+    Point at it with VLLM_RERANKER_URL (default http://127.0.0.1:8011).
+    """
+
+    PREFIX = '<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
+    SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    DEFAULT_INSTRUCTION = (
+        "Given a web search query, retrieve relevant passages that answer the query"
+    )
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        model: str = "Qwen/Qwen3-Reranker-8B",
+        token_counter: Optional[Callable[[str], int]] = None,
+        max_tokens: Optional[int] = None,
+        batch_size: int = 32,
+        timeout_s: int = 360,
+    ):
+        super().__init__(token_counter=token_counter, max_tokens=max_tokens)
+        import os
+
+        self.base_url = (
+            base_url or os.getenv("VLLM_RERANKER_URL", "http://127.0.0.1:8011")
+        ).rstrip("/")
+        self.model = model
+        self.batch_size = batch_size
+        self.timeout_s = timeout_s
+
+    def _rerank(
+        self,
+        query: str,
+        documents: List[str],
+        instruction: Optional[str] = None,
+    ) -> List[RerankResult]:
+        if not documents:
+            return []
+        if instruction is None:
+            instruction = self.DEFAULT_INSTRUCTION
+
+        text_1 = f"{self.PREFIX}<Instruct>: {instruction}\n<Query>: {query}\n"
+        scores: List[float] = []
+        for start in range(0, len(documents), self.batch_size):
+            batch = documents[start : start + self.batch_size]
+            payload = {
+                "model": self.model,
+                "text_1": text_1,
+                "text_2": [f"<Document>: {doc}{self.SUFFIX}" for doc in batch],
+                "truncate_prompt_tokens": -1,
+            }
+            last_error: Optional[Exception] = None
+            for attempt in range(3):
+                try:
+                    response = requests.post(
+                        f"{self.base_url}/score",
+                        json=payload,
+                        timeout=self.timeout_s,
+                    )
+                    response.raise_for_status()
+                    data = response.json()["data"]
+                    scores.extend(float(item["score"]) for item in data)
+                    last_error = None
+                    break
+                except requests.exceptions.RequestException as exc:
+                    last_error = exc
+                    logger.warning(
+                        "vllm_rerank_retry", attempt=attempt + 1, error=str(exc)
+                    )
+                    time.sleep(2**attempt)
+            if last_error is not None:
+                logger.error("vllm_rerank_failed", error=str(last_error))
+                raise last_error
+
+        results = [
+            RerankResult(document=doc, score=score, original_index=idx)
+            for idx, (doc, score) in enumerate(zip(documents, scores))
+        ]
+        results.sort(key=lambda x: x.score, reverse=True)
+        return results
+
+
 class ContextualReranker(Reranker):
     """Reranker implementation using Contextual AI's rerank API."""
 

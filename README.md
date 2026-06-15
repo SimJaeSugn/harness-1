@@ -2,7 +2,6 @@
 
 [![Tinker Inference](https://img.shields.io/badge/Tinker-Inference-073f3d?labelColor=white)](https://github.com/pat-jj/harness-1/blob/main/inference/tinker_inference.md)
 [![Model Checkpoint](https://img.shields.io/badge/Hugging%20Face-Checkpoint-FFCA03?logo=huggingface&logoColor=FFCA03)](https://huggingface.co/pat-jj/harness-1)
-[![Training Data](https://img.shields.io/badge/Hugging%20Face-Training%20Data-FFCA03?logo=huggingface&logoColor=FFCA03)](https://huggingface.co/datasets/pat-jj/harness-1-train-data)
 [![arXiv](https://img.shields.io/badge/arXiv-2606.02373-b31b1b.svg?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2606.02373)
 [![X](https://img.shields.io/badge/X-Post-000000.svg?logo=x&logoColor=white)](https://x.com/patpcj/status/2063298457398636570?s=20)
 

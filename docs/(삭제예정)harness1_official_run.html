@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harness-1 공식 구동 절차 (vLLM + BrowseComp+)</title>
+<style>
+  :root {
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --text:#e6e9ef; --muted:#9aa3b2;
+    --accent:#4f9cf9; --accent2:#5ee0a0; --accent3:#c08cf9; --warn:#f5b86b; --danger:#f06d6d;
+    --border:#2a2f3d; --code-bg:#0b0d13;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    line-height:1.7; font-size:16px; }
+  .wrap { max-width:1000px; margin:0 auto; padding:48px 24px 96px; }
+  header.hero { border-bottom:1px solid var(--border); padding-bottom:28px; margin-bottom:36px; }
+  header.hero h1 { font-size:30px; margin:0 0 10px; letter-spacing:-0.5px; }
+  header.hero p { color:var(--muted); margin:4px 0; }
+  .tag { display:inline-block; font-size:12px; padding:3px 10px; border-radius:999px;
+    background:rgba(79,156,249,0.15); color:var(--accent); border:1px solid rgba(79,156,249,0.35); margin-right:6px; }
+  h2 { font-size:22px; margin:48px 0 14px; padding-left:12px; border-left:4px solid var(--accent); }
+  h3 { font-size:18px; margin:28px 0 10px; color:#cfd6e4; }
+  a { color:var(--accent); }
+  code { background:var(--code-bg); padding:2px 6px; border-radius:5px;
+    font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace; font-size:13.5px; color:#e2c08d; border:1px solid var(--border); }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:14px 0; }
+  pre code { background:none; border:none; padding:0; color:#d7dde9; font-size:13.5px; }
+  .step { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:22px 24px; margin:18px 0; }
+  .step .num { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px;
+    border-radius:8px; background:var(--accent); color:#06203f; font-weight:700; margin-right:10px; }
+  .step h2 { border:none; padding:0; margin:0 0 14px; display:flex; align-items:center; }
+  .callout { border-radius:10px; padding:14px 18px; margin:16px 0; border:1px solid; display:flex; gap:12px; align-items:flex-start; }
+  .callout .ico { font-size:18px; line-height:1.4; }
+  .callout.info { background:rgba(79,156,249,0.08); border-color:rgba(79,156,249,0.3); }
+  .callout.warn { background:rgba(245,184,107,0.08); border-color:rgba(245,184,107,0.35); }
+  .callout.danger { background:rgba(240,109,109,0.08); border-color:rgba(240,109,109,0.35); }
+  .callout.ok { background:rgba(94,224,160,0.08); border-color:rgba(94,224,160,0.3); }
+  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:14.5px; }
+  th,td { border:1px solid var(--border); padding:10px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--panel2); color:#cfd6e4; }
+  td code { font-size:12.5px; }
+  .toc { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px 24px; margin:0 0 32px; }
+  .toc ol { margin:6px 0 0; padding-left:22px; }
+  .toc a { text-decoration:none; } .toc a:hover { text-decoration:underline; }
+  .path { color:var(--accent2); }
+  .muted { color:var(--muted); font-size:14px; }
+  .fig { background:var(--code-bg); border:1px solid var(--border); border-radius:12px; padding:20px; margin:18px 0; }
+  .fig svg { display:block; width:100%; height:auto; }
+  .figcap { color:var(--muted); font-size:13px; text-align:center; margin-top:10px; }
+  footer { margin-top:60px; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:13px; }
+  .svg-label { font:600 13px -apple-system,"Segoe UI",sans-serif; fill:var(--text); }
+  .svg-sub { font:11px "JetBrains Mono",Consolas,monospace; fill:var(--muted); }
+  .svg-small { font:11px -apple-system,"Segoe UI",sans-serif; fill:var(--muted); }
+  .src { font-size:12px; color:var(--muted); margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div>
+      <span class="tag">Harness-1</span>
+      <span class="tag">공식 절차</span>
+      <span class="tag">vLLM</span>
+      <span class="tag">BrowseComp+</span>
+    </div>
+    <h1>Harness-1 공식 구동 절차</h1>
+    <p>프로젝트 문서가 규정한 표준 경로 — vLLM 서빙 → 스모크 테스트 → BrowseComp+ 평가</p>
+    <p class="muted">출처: <span class="path">README.md</span>, <span class="path">docs/run_vllm_browsecompplus.md</span>, <span class="path">inference/README.md</span></p>
+  </header>
+
+  <div class="callout info">
+    <span class="ico">📘</span>
+    <div>
+      이 문서는 <strong>레포가 공식적으로 요구하는 구동 방법</strong>을 그대로 정리한 것입니다(커스터마이즈 없음).
+      Qdrant·임베딩 교체 등 변형 경로는 별도 문서 <span class="path">harness1_qdrant_guide.html</span>를 참고하세요.
+    </div>
+  </div>
+
+  <!-- ===== PIPELINE SVG ===== -->
+  <div class="fig">
+    <svg viewBox="0 0 960 130" role="img" aria-label="공식 파이프라인">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#4f9cf9"/></marker>
+        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e2230"/><stop offset="1" stop-color="#171a23"/></linearGradient>
+      </defs>
+      <g>
+        <rect x="8"   y="35" width="150" height="60" rx="12" fill="url(#g)" stroke="#2a2f3d"/>
+        <circle cx="34" cy="65" r="14" fill="#4f9cf9"/><text x="34" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">1</text>
+        <text x="56" y="60" class="svg-label">설치 · 환경</text><text x="56" y="78" class="svg-sub">uv sync</text>
+        <rect x="190" y="35" width="150" height="60" rx="12" fill="url(#g)" stroke="#2a2f3d"/>
+        <circle cx="216" cy="65" r="14" fill="#4f9cf9"/><text x="216" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">2</text>
+        <text x="238" y="60" class="svg-label">모델 서빙</text><text x="238" y="78" class="svg-sub">vllm serve</text>
+        <rect x="372" y="35" width="150" height="60" rx="12" fill="url(#g)" stroke="#2a2f3d"/>
+        <circle cx="398" cy="65" r="14" fill="#4f9cf9"/><text x="398" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">3</text>
+        <text x="420" y="60" class="svg-label">스모크 테스트</text><text x="420" y="78" class="svg-sub">token_ids</text>
+        <rect x="554" y="35" width="170" height="60" rx="12" fill="url(#g)" stroke="#2a2f3d"/>
+        <circle cx="580" cy="65" r="14" fill="#4f9cf9"/><text x="580" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">4</text>
+        <text x="602" y="60" class="svg-label">평가 셋업</text><text x="602" y="78" class="svg-sub">V8D_ · BCP+</text>
+        <rect x="756" y="35" width="196" height="60" rx="12" fill="url(#g)" stroke="#5ee0a0"/>
+        <circle cx="782" cy="65" r="14" fill="#5ee0a0"/><text x="782" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">5</text>
+        <text x="804" y="60" class="svg-label">평가 실행·결과</text><text x="804" y="78" class="svg-sub">evaluate</text>
+      </g>
+      <line x1="158" y1="65" x2="188" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="340" y1="65" x2="370" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="522" y1="65" x2="552" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="724" y1="65" x2="754" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+    </svg>
+    <div class="figcap">그림 1 · 공식 구동 파이프라인 (1 → 5)</div>
+  </div>
+
+  <div class="toc">
+    <strong>목차</strong>
+    <ol>
+      <li><a href="#prereq">사전 요구사항 &amp; 셋업 레벨</a></li>
+      <li><a href="#s1">[1] 설치 &amp; 환경 변수</a></li>
+      <li><a href="#s2">[2] 모델 서빙 (vLLM)</a></li>
+      <li><a href="#s3">[3] 스모크 테스트 (token IDs)</a></li>
+      <li><a href="#s4">[4] BrowseComp+ 평가 셋업</a></li>
+      <li><a href="#s5">[5] 평가 실행 · 모니터링 · 결과</a></li>
+      <li><a href="#alt">대안 경로 (HF / Tinker / 로컬 래퍼)</a></li>
+      <li><a href="#trouble">트러블슈팅</a></li>
+    </ol>
+  </div>
+
+  <!-- ===== PREREQ ===== -->
+  <section id="prereq">
+    <h2>0. 사전 요구사항 &amp; 셋업 레벨</h2>
+    <table>
+      <tr><th>요소</th><th>요구사항</th></tr>
+      <tr><td>OS / Python</td><td>Linux · Python <code>3.11+</code></td></tr>
+      <tr><td>패키지 관리</td><td><code>uv</code> 설치</td></tr>
+      <tr><td>GPU</td><td>CUDA 호환 NVIDIA GPU (검증 환경 H100급)</td></tr>
+      <tr><td>vLLM</td><td>GPT-OSS 지원 빌드. 레포 선언 <code>vllm&gt;=0.13.0</code>, 검증 <code>0.20.2</code></td></tr>
+      <tr><td>체크포인트</td><td>HF <code>pat-jj/harness-1</code> 접근</td></tr>
+    </table>
+
+    <!-- ===== SETUP LEVELS SVG ===== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 200" role="img" aria-label="셋업 레벨">
+        <text x="20" y="28" class="svg-label">셋업 레벨 — 목적에 따라 필요한 범위가 다름</text>
+        <!-- L1 -->
+        <rect x="20" y="50" width="290" height="120" rx="12" fill="#171a23" stroke="#4f9cf9"/>
+        <text x="165" y="78" text-anchor="middle" class="svg-label" style="fill:#4f9cf9">최소 모델 서빙</text>
+        <text x="165" y="100" text-anchor="middle" class="svg-small">uv sync --extra vllm</text>
+        <text x="165" y="118" text-anchor="middle" class="svg-small">HARNESS1_HF_MODEL</text>
+        <text x="165" y="146" text-anchor="middle" class="svg-sub">→ 체크포인트 로컬 서빙 확인</text>
+        <!-- L2 -->
+        <rect x="335" y="50" width="290" height="120" rx="12" fill="#171a23" stroke="#5ee0a0"/>
+        <text x="480" y="78" text-anchor="middle" class="svg-label" style="fill:#5ee0a0">전체 BrowseComp+ 평가</text>
+        <text x="480" y="100" text-anchor="middle" class="svg-small">+ BCP+ 쿼리/qrel/answer</text>
+        <text x="480" y="118" text-anchor="middle" class="svg-small">+ Chroma 컬렉션 · OPENAI_API_KEY</text>
+        <text x="480" y="146" text-anchor="middle" class="svg-sub">→ recall / precision 측정</text>
+        <!-- L3 -->
+        <rect x="650" y="50" width="290" height="120" rx="12" fill="#171a23" stroke="#c08cf9"/>
+        <text x="795" y="78" text-anchor="middle" class="svg-label" style="fill:#c08cf9">개발 · 학습</text>
+        <text x="795" y="100" text-anchor="middle" class="svg-small">uv sync (기본)</text>
+        <text x="795" y="118" text-anchor="middle" class="svg-small">smoke_imports / smoke_cli</text>
+        <text x="795" y="146" text-anchor="middle" class="svg-sub">→ 코드 개발 · training/</text>
+      </svg>
+      <div class="figcap">그림 2 · 셋업 레벨 (README "Setup Levels") — 본 문서는 ①·②를 다룸</div>
+    </div>
+
+    <p class="src">근거: README.md "Quickstart" / "Setup Levels", docs/run_vllm_browsecompplus.md "Prerequisites"</p>
+  </section>
+
+  <!-- ===== S1 ===== -->
+  <section id="s1" class="step">
+    <h2><span class="num">1</span> 설치 &amp; 환경 변수</h2>
+
+    <h3>의존성 설치</h3>
+    <pre><code>cd /path/to/harness-1
+uv sync --extra vllm
+export PYTHONPATH=.</code></pre>
+
+    <h3>체크포인트 지정</h3>
+    <pre><code>export HARNESS1_HF_MODEL="${HARNESS1_HF_MODEL:-pat-jj/harness-1}"
+
+# 체크포인트 접근에 인증이 필요하면:
+huggingface-cli login</code></pre>
+
+    <h3>시크릿 설정</h3>
+    <pre><code>cp .env.example .env.local      # 필요한 키만 채움
+
+set -a
+source .env.local
+set +a
+
+export HF_TOKEN="${HUGGINGFACE_TOKEN:-$HF_TOKEN}"
+export HARNESS1_HF_MODEL="${HARNESS1_HF_MODEL:-pat-jj/harness-1}"
+export PYTHONPATH=.</code></pre>
+
+    <table>
+      <tr><th>변수</th><th>용도</th></tr>
+      <tr><td><code>HUGGINGFACE_TOKEN</code></td><td>HF 체크포인트 접근 인증 (필요 시)</td></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td>BrowseComp+ 평가의 검색(임베딩) 지원</td></tr>
+      <tr><td><code>CHROMA_API_KEY</code>, <code>CHROMA_DATABASE</code></td><td>Chroma 기반 평가</td></tr>
+      <tr><td><code>BASETEN_API_KEY</code>, <code>BASETEN_MODEL_URL</code></td><td>선택적 리랭커</td></tr>
+      <tr><td><code>BROWSECOMPPLUS_*_PATH</code></td><td>로컬 BCP+ 쿼리/qrel/answer 파일</td></tr>
+    </table>
+    <p class="src">근거: docs/run_vllm_browsecompplus.md "Install" / "Secret Handling"</p>
+  </section>
+
+  <!-- ===== S2 ===== -->
+  <section id="s2" class="step">
+    <h2><span class="num">2</span> 모델 서빙 (vLLM)</h2>
+
+    <h3>단일 GPU</h3>
+    <pre><code>CUDA_VISIBLE_DEVICES=0 \
+VLLM_USE_DEEP_GEMM=0 \
+VLLM_MOE_USE_DEEP_GEMM=0 \
+uv run vllm serve "$HARNESS1_HF_MODEL" \
+  --served-model-name harness-1 \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --max-num-batched-tokens 16384 \
+  --trust-remote-code \
+  --moe-backend triton</code></pre>
+
+    <h3>다중 GPU</h3>
+    <pre><code>CUDA_VISIBLE_DEVICES=0,1 \
+VLLM_USE_DEEP_GEMM=0 \
+VLLM_MOE_USE_DEEP_GEMM=0 \
+uv run vllm serve "$HARNESS1_HF_MODEL" \
+  --served-model-name harness-1 \
+  --host 0.0.0.0 --port 8000 \
+  --tensor-parallel-size 2 \
+  --max-model-len 32768 \
+  --max-num-batched-tokens 16384 \
+  --trust-remote-code \
+  --moe-backend triton</code></pre>
+
+    <div class="callout info">
+      <span class="ico">ℹ️</span>
+      <div>
+        <code>--tensor-parallel-size</code>는 <strong>가시 GPU 수와 동일</strong>하게. <code>--moe-backend triton</code>과
+        DeepGEMM 비활성화는 FlashInfer CUTLASS(nvcc 필요)·DeepGEMM 미지원 환경에서 흔한 기동 실패를 회피합니다.
+      </div>
+    </div>
+
+    <h3>헬스 체크</h3>
+    <pre><code>curl -sS http://127.0.0.1:8000/health   # 빈 성공 응답이면 준비 완료</code></pre>
+    <p class="src">근거: docs/run_vllm_browsecompplus.md "Minimum Setup: Serve The Model"</p>
+  </section>
+
+  <!-- ===== S3 ===== -->
+  <section id="s3" class="step">
+    <h2><span class="num">3</span> 스모크 테스트 (token IDs)</h2>
+    <p>
+      평가 하니스는 chat completions가 아니라 <strong>raw <code>/v1/completions</code></strong>를 쓰고,
+      vLLM이 <strong>생성 토큰 ID</strong>를 반환해야 합니다. 평가 전 반드시 확인하세요.
+    </p>
+
+    <!-- ===== TOKEN PROTOCOL SVG ===== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 150" role="img" aria-label="토큰 ID 프로토콜">
+        <defs><marker id="ar" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5ee0a0"/></marker></defs>
+        <rect x="30" y="50" width="240" height="56" rx="10" fill="#171a23" stroke="#4f9cf9"/>
+        <text x="150" y="74" text-anchor="middle" class="svg-label" style="fill:#4f9cf9">평가 클라이언트</text>
+        <text x="150" y="93" text-anchor="middle" class="svg-sub">prompt = [정수 토큰 ID]</text>
+        <rect x="690" y="50" width="240" height="56" rx="10" fill="#171a23" stroke="#5ee0a0"/>
+        <text x="810" y="74" text-anchor="middle" class="svg-label" style="fill:#5ee0a0">vLLM 서버</text>
+        <text x="810" y="93" text-anchor="middle" class="svg-sub">return_token_ids: true</text>
+        <line x1="270" y1="68" x2="688" y2="68" stroke="#5ee0a0" stroke-width="2" marker-end="url(#ar)"/>
+        <text x="480" y="60" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">/v1/completions (토큰 배열)</text>
+        <line x1="688" y1="92" x2="270" y2="92" stroke="#5ee0a0" stroke-width="2" marker-end="url(#ar)"/>
+        <text x="480" y="112" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">token_ids 반환 ← 필수</text>
+        <text x="480" y="138" text-anchor="middle" class="svg-small">token_ids_returned True 가 출력돼야 평가 진행 가능</text>
+      </svg>
+      <div class="figcap">그림 3 · 평가 하니스는 토큰 ID 입출력을 사용 — 텍스트 API로는 동작하지 않음</div>
+    </div>
+
+    <pre><code>python - &lt;&lt;'PY'
+import json, urllib.request
+payload = {
+    "model": "harness-1",
+    "prompt": "Say OK.",
+    "max_tokens": 4,
+    "temperature": 0.0,
+    "stream": False,
+    "return_token_ids": True,
+}
+req = urllib.request.Request(
+    "http://127.0.0.1:8000/v1/completions",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={"Content-Type": "application/json"}, method="POST",
+)
+with urllib.request.urlopen(req, timeout=120) as resp:
+    data = json.loads(resp.read().decode("utf-8"))
+choice = data["choices"][0]
+tokens = choice.get("token_ids") or choice.get("tokens") or choice.get("text_token_ids")
+print(choice.get("text", "").replace("\n", "\\n"))
+print("token_ids_returned", bool(tokens))
+PY</code></pre>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div><code>token_ids_returned True</code>가 출력될 때만 평가로 진행하세요. 아니면 더 최신 vLLM 빌드 필요.</div>
+    </div>
+    <p class="src">근거: docs/run_vllm_browsecompplus.md "Minimum Smoke Test"</p>
+  </section>
+
+  <!-- ===== S4 ===== -->
+  <section id="s4" class="step">
+    <h2><span class="num">4</span> BrowseComp+ 평가 셋업</h2>
+
+    <h3>데이터 경로 (.env.local)</h3>
+    <pre><code>BROWSECOMPPLUS_QUERIES_PATH=/path/to/BrowseComp-Plus/topics-qrels/queries.tsv
+BROWSECOMPPLUS_QRELS_GOLD_PATH=/path/to/BrowseComp-Plus/topics-qrels/qrel_golds.txt
+BROWSECOMPPLUS_QRELS_EVIDENCE_PATH=/path/to/BrowseComp-Plus/topics-qrels/qrel_evidence.txt
+BROWSECOMPPLUS_ANSWERS_PATH=/path/to/BrowseComp-Plus/data/browsecomp_plus_decrypted.jsonl</code></pre>
+
+    <div class="callout info">
+      <span class="ico">ℹ️</span>
+      <div>Chroma 배포에는 BCP+ 테스트 컬렉션(<code>browsecomp_plus_test</code>)이 있어야 하고, <strong>문서 ID가 BCP+ qrels와 일치</strong>해야 채점이 됩니다. 데이터 셋업은 <span class="path">datagen/README.md</span> 참고.</div>
+    </div>
+
+    <h3>Harness-1 operating point 플래그</h3>
+    <pre><code>export V8D_SUBTRACTIVE_CURATION=1
+export V8D_IMPORTANCE_TAGGING=1
+export V8D_AUTO_POPULATE_FIRST_SEARCH=1
+export V8D_EVIDENCE_GRAPH=1
+export V8D_SENTENCE_COMPRESS=1
+export V8D_CHUNK_NEIGHBORS=0
+export V8D_CONTENT_DEDUP=1
+export V8D_VERIFY_TOOL=1
+export V8D_TOKEN_BUDGET_MARKER=1
+export V8D_ADAPTIVE_RERANK_INSTRUCTION=0
+export SENTENCE_COMPRESS_K=4
+export AUTO_POPULATE_TOP_K=8
+
+export SEARCH_DISPLAY_LIMIT=10
+export SEARCH_TOKEN_BUDGET=4096
+export MAX_OBS_CHARS=15000
+export DOC_SNIPPET_CHARS=120
+export CURATED_DOC_CHARS=0
+export MAX_TURNS=35</code></pre>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div><code>--max-turns 40</code>은 평가기에 그대로 전달되지만, <code>MAX_TURNS=35</code> 환경변수는 학습 하니스에서 import되는 프롬프트·리워드 상수에 쓰입니다(둘 다 설정).</div>
+    </div>
+    <p class="src">근거: docs/run_vllm_browsecompplus.md "Full Evaluation Setup"</p>
+  </section>
+
+  <!-- ===== S5 ===== -->
+  <section id="s5" class="step">
+    <h2><span class="num">5</span> 평가 실행 · 모니터링 · 결과</h2>
+
+    <h3>실행</h3>
+    <pre><code>N_QUERIES=10
+SEED=42
+RUN_DIR=tmp/harness1_vllm_bcplus
+mkdir -p "$RUN_DIR/trajectories"
+
+export SAVE_TRAJECTORIES=1
+export SAVE_FULL_TRAJECTORIES=1
+export TRAJECTORY_SAVE_PATH="$RUN_DIR/trajectories"
+
+PYTHONPATH=. uv run python inference/evaluate_harness1_vllm.py \
+  --dataset browsecompplus \
+  --split test \
+  --collection-split test \
+  --n-queries "$N_QUERIES" \
+  --seed "$SEED" \
+  --max-turns 40 \
+  --temperature 1.0 \
+  --max-tokens 2048 \
+  --parallel 2 \
+  --base-url http://127.0.0.1:8000/v1 \
+  --model harness-1 \
+  --partial-output "$RUN_DIR/partial_results.jsonl" \
+  --output "$RUN_DIR/eval_results.json"</code></pre>
+    <p class="muted">고정 질의로 평가하려면 <code>--query-ids ...</code>를 사용. 작은 <code>N_QUERIES</code>는 스모크용(분산 큼), 큰 값은 안정적 집계.</p>
+
+    <h3>진행 모니터링</h3>
+    <pre><code>python - &lt;&lt;'PY'
+from pathlib import Path
+import json, statistics
+run_dir = Path("tmp/harness1_vllm_bcplus")
+rows = [json.loads(l) for l in (run_dir/"partial_results.jsonl").read_text().splitlines() if l.strip()]
+print("completed", len(rows))
+for key in ["recall","final_answer_recall","trajectory_recall","precision","turns"]:
+    vals = [float(r.get(key,0.0) or 0.0) for r in rows]
+    print(key, "mean", round(sum(vals)/max(len(vals),1),4),
+          "median", round(statistics.median(vals),4) if vals else None)
+print("errors", sum(1 for r in rows if r.get("error")))
+PY
+
+nvidia-smi   # GPU 사용률 확인</code></pre>
+
+    <h3>최종 결과</h3>
+    <pre><code>python - &lt;&lt;'PY'
+from pathlib import Path
+import json
+data = json.loads(Path("tmp/harness1_vllm_bcplus/eval_results.json").read_text())
+print(json.dumps(data["_summary"], indent=2))
+PY</code></pre>
+
+    <table>
+      <tr><th>지표</th><th>의미</th></tr>
+      <tr><td><code>recall</code></td><td>최종 큐레이션 집합의 증거 문서 recall</td></tr>
+      <tr><td><code>final_answer_recall</code></td><td>최종 답에 연결된 증거 recall</td></tr>
+      <tr><td><code>trajectory_recall</code></td><td>탐색 trajectory 전체의 증거 recall</td></tr>
+      <tr><td><code>precision</code></td><td>최종 큐레이션 집합의 precision</td></tr>
+      <tr><td><code>errors</code></td><td>하니스 에러로 끝난 에피소드 수</td></tr>
+    </table>
+    <p class="src">근거: docs/run_vllm_browsecompplus.md "Run BrowseComp+" / "Monitor Progress" / "Read Final Results"</p>
+  </section>
+
+  <!-- ===== ALT ===== -->
+  <section id="alt">
+    <h2>대안 경로</h2>
+
+    <h3>① HF 직접 로드 (로드 확인용 스모크)</h3>
+    <pre><code>uv run python inference/hf_inference.py \
+  --model ${HARNESS1_HF_MODEL:-pat-jj/harness-1} \
+  --prompt "Briefly describe Harness-1."</code></pre>
+    <p class="muted">검색 에이전트가 아니라 "체크포인트가 로드되는가"만 확인하는 평이 생성 테스트.</p>
+
+    <h3>② 로컬 vLLM 래퍼</h3>
+    <pre><code>uv run python inference/vllm_local_inference.py serve \
+  --model ${HARNESS1_HF_MODEL:-pat-jj/harness-1} \
+  --served-model-name harness-1 --tensor-parallel-size 1
+
+uv run python inference/vllm_local_inference.py query \
+  --url http://localhost:8000 --served-model-name harness-1 \
+  --prompt "What is Harness-1?"</code></pre>
+
+    <h3>③ Tinker 호스팅 평가 (GPU 없이)</h3>
+    <pre><code>set -a && source .env.local && set +a
+PYTHONPATH=. uv run python inference/evaluate_harness1.py \
+  --dataset browsecompplus --split test --collection-split test \
+  --max-turns 40 --temperature 1.0 \
+  --checkpoints harness1="$HARNESS1_TINKER_CHECKPOINT" \
+  --output tmp/eval_harness1_browsecompplus.json</code></pre>
+    <p class="muted">공개 Tinker 체크포인트 경로·플래그는 <span class="path">inference/tinker_inference.md</span> 참고.</p>
+    <p class="src">근거: README.md "Inference", inference/README.md</p>
+  </section>
+
+  <!-- ===== TROUBLE ===== -->
+  <section id="trouble">
+    <h2>트러블슈팅</h2>
+    <table>
+      <tr><th>증상</th><th>해결</th></tr>
+      <tr><td>vLLM이 <code>GptOssForCausalLM</code> 미지원</td><td>레포 환경 사용 + 버전 확인(<code>uv sync --extra vllm</code>, 0.20.2급)</td></tr>
+      <tr><td>FlashInfer CUTLASS / nvcc 누락</td><td><code>--moe-backend triton</code></td></tr>
+      <tr><td>DeepGEMM 미지원/구버전</td><td><code>VLLM_USE_DEEP_GEMM=0 VLLM_MOE_USE_DEEP_GEMM=0</code></td></tr>
+      <tr><td><code>/v1/completions</code>가 텍스트만, 토큰ID 없음</td><td>최신 vLLM 빌드로 교체 후 스모크 재실행</td></tr>
+      <tr><td>지표가 기대보다 크게 낮음</td><td>V8D_ 플래그 전부 설정 / Chroma·qrel ID 일치 / 리랭커 자격증명 / 요청 질의 수 완주 / raw completions 사용 확인</td></tr>
+    </table>
+    <p class="src">근거: docs/run_vllm_browsecompplus.md "Common Issues"</p>
+
+    <div class="callout ok">
+      <span class="ico">📁</span>
+      <div>
+        <strong>관련 문서</strong> — <span class="path">docs/run_vllm_browsecompplus.md</span> (상세 런북),
+        <span class="path">inference/tinker_inference.md</span> (Tinker),
+        <span class="path">datagen/README.md</span> (데이터 셋업),
+        <span class="path">model_export/README.md</span> (모델 익스포트)
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Harness-1 공식 구동 절차 · 생성 2026-06-17 · 출처: 레포 README.md / docs / inference 문서<br>
+    프로젝트: <span class="path">E:\04.개발환경\python\03.harness_1_Agent\harness-1</span>
+  </footer>
+
+</div>
+</body>
+</html>

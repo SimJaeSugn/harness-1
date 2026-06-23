@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harness-1 구동 절차 (vLLM 서빙 + Qdrant + 임베딩 교체)</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel2: #1e2230;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #4f9cf9;
+    --accent2: #5ee0a0;
+    --accent3: #c08cf9;
+    --warn: #f5b86b;
+    --danger: #f06d6d;
+    --border: #2a2f3d;
+    --code-bg: #0b0d13;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    line-height: 1.7; font-size: 16px;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 24px 96px; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 28px; margin-bottom: 36px; }
+  header.hero h1 { font-size: 30px; margin: 0 0 10px; letter-spacing: -0.5px; }
+  header.hero p { color: var(--muted); margin: 4px 0; }
+  .tag {
+    display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    background: rgba(79,156,249,0.15); color: var(--accent); border: 1px solid rgba(79,156,249,0.35);
+    margin-right: 6px;
+  }
+  h2 { font-size: 22px; margin: 48px 0 14px; padding-left: 12px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 18px; margin: 28px 0 10px; color: #cfd6e4; }
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg); padding: 2px 6px; border-radius: 5px;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 13.5px;
+    color: #e2c08d; border: 1px solid var(--border);
+  }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; border: none; padding: 0; color: #d7dde9; font-size: 13.5px; }
+  .step { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin: 18px 0; }
+  .step .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; background: var(--accent);
+    color: #06203f; font-weight: 700; margin-right: 10px;
+  }
+  .step h2 { border: none; padding: 0; margin: 0 0 14px; display: flex; align-items: center; }
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 16px 0; border: 1px solid; display: flex; gap: 12px; align-items: flex-start; }
+  .callout .ico { font-size: 18px; line-height: 1.4; }
+  .callout.info   { background: rgba(79,156,249,0.08);  border-color: rgba(79,156,249,0.3); }
+  .callout.warn   { background: rgba(245,184,107,0.08); border-color: rgba(245,184,107,0.35); }
+  .callout.danger { background: rgba(240,109,109,0.08); border-color: rgba(240,109,109,0.35); }
+  .callout.ok     { background: rgba(94,224,160,0.08);  border-color: rgba(94,224,160,0.3); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); color: #cfd6e4; }
+  td code { font-size: 12.5px; }
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 24px; margin: 0 0 32px; }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; }
+  .toc a { text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .path { color: var(--accent2); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .fig { background: var(--code-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 18px 0; }
+  .fig svg { display: block; width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13px; text-align: center; margin-top: 10px; }
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+  .svg-label { font: 600 13px -apple-system,"Segoe UI",sans-serif; fill: var(--text); }
+  .svg-sub   { font: 11px "JetBrains Mono",Consolas,monospace; fill: var(--muted); }
+  .svg-small { font: 11px -apple-system,"Segoe UI",sans-serif; fill: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div>
+      <span class="tag">Harness-1</span>
+      <span class="tag">vLLM</span>
+      <span class="tag">Qdrant</span>
+      <span class="tag">Embedding</span>
+    </div>
+    <h1>Harness-1 구동 절차 가이드</h1>
+    <p>vLLM 모델 서빙 → Qdrant 검색 백엔드 연결 → 임베딩 모델 교체 → 에이전트 실행</p>
+    <p class="muted">프로젝트 루트: <span class="path">E:\04.개발환경\python\03.harness_1_Agent\harness-1</span>
+       <span class="muted">(WSL: <span class="path">/mnt/e/.../harness-1</span>)</span></p>
+  </header>
+
+  <!-- ====== PIPELINE OVERVIEW SVG ====== -->
+  <div class="fig">
+    <svg viewBox="0 0 960 130" role="img" aria-label="전체 파이프라인">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#4f9cf9"/>
+        </marker>
+        <linearGradient id="gstep" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#1e2230"/><stop offset="1" stop-color="#171a23"/>
+        </linearGradient>
+      </defs>
+      <!-- 5 steps -->
+      <g>
+        <!-- step 0 -->
+        <rect x="8"  y="35" width="160" height="60" rx="12" fill="url(#gstep)" stroke="#2a2f3d"/>
+        <circle cx="34" cy="65" r="14" fill="#4f9cf9"/><text x="34" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">0</text>
+        <text x="56" y="60" class="svg-label">vLLM 서빙</text>
+        <text x="56" y="78" class="svg-sub">harness-1 :8000</text>
+        <!-- step 1 -->
+        <rect x="200" y="35" width="160" height="60" rx="12" fill="url(#gstep)" stroke="#2a2f3d"/>
+        <circle cx="226" cy="65" r="14" fill="#4f9cf9"/><text x="226" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">1</text>
+        <text x="248" y="60" class="svg-label">Qdrant 어댑터</text>
+        <text x="248" y="78" class="svg-sub">tools.py</text>
+        <!-- step 2 -->
+        <rect x="392" y="35" width="160" height="60" rx="12" fill="url(#gstep)" stroke="#2a2f3d"/>
+        <circle cx="418" cy="65" r="14" fill="#4f9cf9"/><text x="418" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">2</text>
+        <text x="440" y="60" class="svg-label">임베딩 교체</text>
+        <text x="440" y="78" class="svg-sub">create_embeddings</text>
+        <!-- step 3 -->
+        <rect x="584" y="35" width="160" height="60" rx="12" fill="url(#gstep)" stroke="#2a2f3d"/>
+        <circle cx="610" cy="65" r="14" fill="#4f9cf9"/><text x="610" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">3</text>
+        <text x="632" y="60" class="svg-label">러너 연결</text>
+        <text x="632" y="78" class="svg-sub">driver</text>
+        <!-- step 4 -->
+        <rect x="776" y="35" width="176" height="60" rx="12" fill="url(#gstep)" stroke="#5ee0a0"/>
+        <circle cx="802" cy="65" r="14" fill="#5ee0a0"/><text x="802" y="70" text-anchor="middle" font-weight="700" fill="#06203f" font-size="14">4</text>
+        <text x="824" y="60" class="svg-label">실행</text>
+        <text x="824" y="78" class="svg-sub">agent loop</text>
+      </g>
+      <!-- arrows -->
+      <line x1="168" y1="65" x2="198" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="360" y1="65" x2="390" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="552" y1="65" x2="582" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="744" y1="65" x2="774" y2="65" stroke="#4f9cf9" stroke-width="2" marker-end="url(#arrow)"/>
+    </svg>
+    <div class="figcap">그림 1 · 전체 구축 파이프라인 (0 → 4)</div>
+  </div>
+
+  <div class="toc">
+    <strong>목차</strong>
+    <ol>
+      <li><a href="#overview">전체 구조 이해</a></li>
+      <li><a href="#prereq">사전 조건 (실행 환경)</a></li>
+      <li><a href="#step0">[0] vLLM 서빙 환경 구축</a></li>
+      <li><a href="#step1">[1] Qdrant 어댑터 도구 작성</a></li>
+      <li><a href="#step2">[2] 임베딩 모델 교체</a></li>
+      <li><a href="#step3">[3] 실행 러너 연결</a></li>
+      <li><a href="#step4">[4] 에이전트 실행</a></li>
+      <li><a href="#notes">주의사항 &amp; 트러블슈팅</a></li>
+    </ol>
+  </div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section id="overview">
+    <h2>1. 전체 구조 이해</h2>
+    <p>
+      Harness-1은 <strong>강화학습으로 학습된 20B 검색 에이전트</strong>입니다. 핵심은 모델을 코드에 직접 로드하는 구조가
+      <em>아니라</em>, <strong>별도로 서빙되는 모델 서버에 HTTP로 붙는 클라이언트 구조</strong>라는 점입니다.
+      에이전트 루프·검색 도구·상태 관리는 클라이언트(이 코드베이스)에 있고, 토큰 생성만 모델 서버(vLLM)에 위임합니다.
+    </p>
+
+    <!-- ====== ARCHITECTURE SVG ====== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 360" role="img" aria-label="시스템 아키텍처">
+        <defs>
+          <marker id="a2" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa3b2"/></marker>
+          <marker id="a2b" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5ee0a0"/></marker>
+          <marker id="a2g" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#c08cf9"/></marker>
+        </defs>
+
+        <!-- user query -->
+        <rect x="380" y="14" width="200" height="44" rx="10" fill="#1e2230" stroke="#2a2f3d"/>
+        <text x="480" y="41" text-anchor="middle" class="svg-label">사용자 질의</text>
+
+        <!-- agent loop (center) -->
+        <rect x="300" y="100" width="360" height="120" rx="14" fill="#171a23" stroke="#4f9cf9" stroke-width="1.5"/>
+        <text x="480" y="126" text-anchor="middle" class="svg-label" style="fill:#4f9cf9">에이전트 루프  (이 코드베이스)</text>
+        <text x="480" y="148" text-anchor="middle" class="svg-sub">SlidingWindowSearchEnv</text>
+        <rect x="324" y="162" width="140" height="40" rx="8" fill="#1e2230" stroke="#2a2f3d"/>
+        <text x="394" y="187" text-anchor="middle" class="svg-small" style="fill:#e6e9ef">상태 / 큐레이션</text>
+        <rect x="496" y="162" width="140" height="40" rx="8" fill="#1e2230" stroke="#2a2f3d"/>
+        <text x="566" y="187" text-anchor="middle" class="svg-small" style="fill:#e6e9ef">검색 도구</text>
+
+        <!-- vLLM server (right) -->
+        <rect x="730" y="110" width="210" height="100" rx="14" fill="#171a23" stroke="#5ee0a0" stroke-width="1.5"/>
+        <text x="835" y="140" text-anchor="middle" class="svg-label" style="fill:#5ee0a0">vLLM 서버 :8000</text>
+        <text x="835" y="162" text-anchor="middle" class="svg-sub">harness-1 (20B)</text>
+        <text x="835" y="184" text-anchor="middle" class="svg-small">토큰 생성 위임</text>
+
+        <!-- vector store (bottom) -->
+        <rect x="300" y="270" width="360" height="76" rx="14" fill="#171a23" stroke="#c08cf9" stroke-width="1.5"/>
+        <text x="480" y="298" text-anchor="middle" class="svg-label" style="fill:#c08cf9">검색 백엔드 (벡터 스토어)</text>
+        <text x="480" y="320" text-anchor="middle" class="svg-sub">기본 Chroma  →  교체: Qdrant</text>
+        <text x="480" y="337" text-anchor="middle" class="svg-small">코퍼스 + 임베딩 + 인덱스</text>
+
+        <!-- arrows -->
+        <line x1="480" y1="58" x2="480" y2="98" stroke="#9aa3b2" stroke-width="2" marker-end="url(#a2)"/>
+        <!-- agent <-> vllm -->
+        <line x1="660" y1="140" x2="728" y2="140" stroke="#5ee0a0" stroke-width="2" marker-end="url(#a2b)"/>
+        <line x1="728" y1="172" x2="662" y2="172" stroke="#5ee0a0" stroke-width="2" marker-end="url(#a2b)"/>
+        <text x="694" y="132" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">토큰</text>
+        <!-- agent <-> vector -->
+        <line x1="480" y1="220" x2="480" y2="268" stroke="#c08cf9" stroke-width="2" marker-end="url(#a2g)"/>
+        <text x="540" y="250" text-anchor="middle" class="svg-small" style="fill:#c08cf9">search / grep / read</text>
+      </svg>
+      <div class="figcap">그림 2 · 시스템 아키텍처 — 에이전트(클라이언트) ↔ 모델 서버 ↔ 검색 백엔드</div>
+    </div>
+
+    <div class="callout info">
+      <span class="ico">ℹ️</span>
+      <div>
+        <strong>3가지 필수 요소</strong> — 에이전트를 의미 있게 돌리려면 ①모델 서버, ②검색 백엔드(코퍼스/벡터스토어),
+        ③동작 플래그(<code>V8D_*</code>)가 모두 있어야 합니다. 모델만 있고 검색 백엔드가 없으면 첫 검색에서 실패합니다.
+      </div>
+    </div>
+
+    <h3>이 가이드가 다루는 변경점</h3>
+    <table>
+      <tr><th>항목</th><th>기본 상태</th><th>이 가이드에서</th></tr>
+      <tr><td>모델 서빙</td><td>vLLM / Tinker</td><td>vLLM 로컬 서빙 (EdgeXpert)</td></tr>
+      <tr><td>검색 백엔드</td><td>Chroma (네이티브 하이브리드 검색)</td><td><strong>Qdrant로 교체</strong></td></tr>
+      <tr><td>쿼리 임베딩</td><td><code>text-embedding-3-small</code> 하드코딩</td><td><strong>Qdrant 색인 모델에 맞춤</strong></td></tr>
+      <tr><td>실행</td><td>벤치마크 eval 러너 (qrels 필요)</td><td>커스텀 드라이버 (자체 문서)</td></tr>
+    </table>
+  </section>
+
+  <!-- ============ PREREQ ============ -->
+  <section id="prereq">
+    <h2>2. 사전 조건 (실행 환경)</h2>
+    <table>
+      <tr><th>요소</th><th>요구사항</th></tr>
+      <tr><td>OS</td><td>Linux (Ubuntu / DGX OS). vLLM은 Windows 네이티브 미지원 → WSL2 또는 EdgeXpert의 DGX OS</td></tr>
+      <tr><td>Python</td><td>3.11+</td></tr>
+      <tr><td>GPU</td><td>NVIDIA CUDA GPU. <strong>MSI EdgeXpert(GB10, 128GB 통합메모리)</strong>는 메모리 여유 충분</td></tr>
+      <tr><td>vLLM</td><td>GPT-OSS 지원 빌드 (검증 0.20.2). GB10은 aarch64 → NVIDIA 컨테이너 권장</td></tr>
+      <tr><td>Qdrant</td><td>색인된 컬렉션 + 접속 정보 (URL, API key, 컬렉션명, 임베딩 모델/차원)</td></tr>
+    </table>
+
+    <!-- ====== MEMORY BAR CHART ====== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 220" role="img" aria-label="메모리 여유 차트">
+        <text x="20" y="28" class="svg-label">EdgeXpert 128GB 통합메모리 vs 모델 메모리 요구</text>
+        <!-- axis -->
+        <line x1="160" y1="60" x2="160" y2="180" stroke="#2a2f3d"/>
+        <line x1="160" y1="180" x2="920" y2="180" stroke="#2a2f3d"/>
+        <!-- scale: 128GB = 740px -->
+        <!-- total capacity bar background -->
+        <rect x="160" y="74" width="740" height="22" rx="5" fill="#1e2230" stroke="#2a2f3d"/>
+        <text x="150" y="90" text-anchor="end" class="svg-small">총 용량</text>
+        <text x="905" y="90" text-anchor="end" class="svg-sub" style="fill:#5ee0a0">128 GB</text>
+        <!-- bf16 ~40GB = 231px -->
+        <rect x="160" y="106" width="231" height="22" rx="5" fill="#4f9cf9"/>
+        <text x="150" y="122" text-anchor="end" class="svg-small">20B · bf16</text>
+        <text x="399" y="122" class="svg-sub" style="fill:#9cc7ff">~40 GB</text>
+        <!-- mxfp4 ~13GB = 75px -->
+        <rect x="160" y="138" width="75" height="22" rx="5" fill="#c08cf9"/>
+        <text x="150" y="154" text-anchor="end" class="svg-small">20B · MXFP4</text>
+        <text x="243" y="154" class="svg-sub" style="fill:#d9b8ff">~13 GB</text>
+        <!-- caption -->
+        <text x="160" y="206" class="svg-small">→ 어느 정밀도든 128GB 안에서 충분히 적재 (메모리는 제약이 아님)</text>
+      </svg>
+      <div class="figcap">그림 3 · 128GB 통합메모리는 20B 체크포인트에 충분 — 병목은 메모리가 아니라 대역폭</div>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div>
+        <strong>EdgeXpert(GB10) 특이사항</strong> — ARM64 + Blackwell이라 일반 x86_64 pip 휠이 안 맞을 수 있습니다.
+        DGX Spark용 NVIDIA vLLM 컨테이너(NGC)를 권장합니다. 메모리는 충분하지만 LPDDR5X 대역폭이 H100 HBM보다 낮아
+        <em>생성 속도는 더 느립니다</em>(기능은 정상).
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STEP 0 ============ -->
+  <section id="step0" class="step">
+    <h2><span class="num">0</span> vLLM 서빙 환경 구축</h2>
+    <p>harness-1 모델을 OpenAI 호환 서버로 띄웁니다. 이 단계는 독립적으로 검증 가능합니다.</p>
+
+    <h3>의존성 설치 (uv 경로)</h3>
+    <pre><code>cd /mnt/e/04.개발환경/python/03.harness_1_Agent/harness-1
+uv sync --extra vllm
+export HARNESS1_HF_MODEL=pat-jj/harness-1
+export PYTHONPATH=.</code></pre>
+
+    <h3>모델 서빙</h3>
+    <pre><code>CUDA_VISIBLE_DEVICES=0 \
+VLLM_USE_DEEP_GEMM=0 \
+VLLM_MOE_USE_DEEP_GEMM=0 \
+uv run vllm serve "$HARNESS1_HF_MODEL" \
+  --served-model-name harness-1 \
+  --host 0.0.0.0 --port 8000 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --trust-remote-code \
+  --moe-backend triton</code></pre>
+
+    <p class="muted">EdgeXpert에서 컨테이너로 갈 경우(권장):</p>
+    <pre><code>docker run --gpus all -p 8000:8000 \
+  nvcr.io/nvidia/vllm:&lt;dgx-spark-tag&gt; \
+  --model pat-jj/harness-1 --trust-remote-code \
+  --served-model-name harness-1 --port 8000</code></pre>
+
+    <div class="callout ok">
+      <span class="ico">📝</span>
+      <div><strong>EdgeXpert 실제 구동 스크립트 (검증 기록)</strong> — NGC 컨테이너 <code>26.01-py3</code> + FP8 양자화로 실제 띄운 명령입니다.</div>
+    </div>
+    <pre><code>docker run --gpus all -p 8000:8000 \
+  --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  nvcr.io/nvidia/vllm:26.01-py3 \
+  vllm serve pat-jj/harness-1 --trust-remote-code \
+  --served-model-name harness-1 \
+  --quantization fp8 \
+  --gpu-memory-utilization 0.4 \
+  --port 8000</code></pre>
+    <table>
+      <tr><th>옵션</th><th>의미</th></tr>
+      <tr><td><code>nvcr.io/nvidia/vllm:26.01-py3</code></td><td>NGC vLLM 컨테이너(aarch64/Blackwell 빌드). GptOss 지원·CUDA 사전 정합</td></tr>
+      <tr><td><code>--ipc=host</code></td><td>공유메모리 제한 해제 (텐서 통신용)</td></tr>
+      <tr><td><code>--ulimit memlock=-1 / stack=67108864</code></td><td>메모리 잠금·스택 한도 확장 (대형 모델 안정 구동)</td></tr>
+      <tr><td><code>-v ~/.cache/huggingface:...</code></td><td>HF 캐시 마운트 → 가중치 재다운로드 방지</td></tr>
+      <tr><td><code>--quantization fp8</code></td><td>FP8 양자화로 메모리·대역폭 절감 (Blackwell FP8 가속 활용)</td></tr>
+      <tr><td><code>--gpu-memory-utilization 0.4</code></td><td>GPU 메모리의 40%만 사용 (통합메모리 공유 환경에서 여유 확보)</td></tr>
+    </table>
+    <div class="callout info">
+      <span class="ico">ℹ️</span>
+      <div>
+        이 컨테이너 경로에서는 <code>vllm serve</code>가 컨테이너 안에서 실행되므로 호스트의 <code>uv sync --extra vllm</code>은
+        불필요합니다. HF 게이트 모델이면 <code>-e HF_TOKEN=...</code>를 추가하세요. <code>--quantization fp8</code>은
+        가중치를 동적 FP8로 적재하므로 <code>--gpu-memory-utilization</code>은 워크로드에 따라 0.4보다 높여도 됩니다.
+      </div>
+    </div>
+
+    <h3>헬스 체크</h3>
+    <pre><code>curl -sS http://127.0.0.1:8000/health   # 빈 성공 응답이면 준비 완료</code></pre>
+
+    <div class="callout ok">
+      <span class="ico">✅</span>
+      <div>이 단계까지 성공하면 "모델 서버"는 완성입니다. 나머지(1~4단계)는 이 서버에 붙는 클라이언트 쪽 작업입니다.</div>
+    </div>
+  </section>
+
+  <!-- ============ STEP 1 ============ -->
+  <section id="step1" class="step">
+    <h2><span class="num">1</span> Qdrant 어댑터 도구 작성</h2>
+    <p>
+      기본 검색 도구는 <span class="path">harness/tools.py</span>에서 Chroma 네이티브 API
+      (<code>chromadb.Search / Rrf / Knn / Key.DOCUMENT.regex</code>)에 강결합돼 있습니다.
+      따라서 Qdrant 컬렉션을 "그대로 꽂을" 수 없고, 아래 3개 도구를 Qdrant API로 재구현해야 합니다.
+    </p>
+
+    <!-- ====== RRF HYBRID SEARCH SVG ====== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 300" role="img" aria-label="RRF 하이브리드 검색">
+        <defs>
+          <marker id="a3" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#4f9cf9"/></marker>
+        </defs>
+        <!-- query -->
+        <rect x="20" y="120" width="150" height="56" rx="10" fill="#1e2230" stroke="#2a2f3d"/>
+        <text x="95" y="145" text-anchor="middle" class="svg-label">질의 텍스트</text>
+        <text x="95" y="164" text-anchor="middle" class="svg-sub">"query"</text>
+
+        <!-- dense path -->
+        <rect x="250" y="50" width="200" height="56" rx="10" fill="#171a23" stroke="#4f9cf9"/>
+        <text x="350" y="74" text-anchor="middle" class="svg-label" style="fill:#4f9cf9">Dense (밀집)</text>
+        <text x="350" y="93" text-anchor="middle" class="svg-sub">임베딩 KNN · dense_vector</text>
+
+        <!-- sparse path -->
+        <rect x="250" y="190" width="200" height="56" rx="10" fill="#171a23" stroke="#c08cf9"/>
+        <text x="350" y="214" text-anchor="middle" class="svg-label" style="fill:#c08cf9">Sparse (희소)</text>
+        <text x="350" y="233" text-anchor="middle" class="svg-sub">BM25 · 로컬 계산</text>
+
+        <!-- fusion -->
+        <rect x="540" y="120" width="180" height="56" rx="10" fill="#171a23" stroke="#5ee0a0"/>
+        <text x="630" y="144" text-anchor="middle" class="svg-label" style="fill:#5ee0a0">RRF 융합</text>
+        <text x="630" y="163" text-anchor="middle" class="svg-sub">Fusion.RRF</text>
+
+        <!-- result -->
+        <rect x="790" y="120" width="150" height="56" rx="10" fill="#1e2230" stroke="#2a2f3d"/>
+        <text x="865" y="145" text-anchor="middle" class="svg-label">상위 문서</text>
+        <text x="865" y="164" text-anchor="middle" class="svg-sub">→ 리랭커</text>
+
+        <!-- arrows -->
+        <line x1="170" y1="140" x2="248" y2="82"  stroke="#4f9cf9" stroke-width="2" marker-end="url(#a3)"/>
+        <line x1="170" y1="156" x2="248" y2="214" stroke="#4f9cf9" stroke-width="2" marker-end="url(#a3)"/>
+        <line x1="450" y1="78"  x2="538" y2="132" stroke="#4f9cf9" stroke-width="2" marker-end="url(#a3)"/>
+        <line x1="450" y1="218" x2="538" y2="164" stroke="#4f9cf9" stroke-width="2" marker-end="url(#a3)"/>
+        <line x1="720" y1="148" x2="788" y2="148" stroke="#4f9cf9" stroke-width="2" marker-end="url(#a3)"/>
+
+        <text x="350" y="290" text-anchor="middle" class="svg-small">Chroma: Rrf(Knn,Knn)  ⇄  Qdrant: prefetch[] + FusionQuery(RRF)</text>
+      </svg>
+      <div class="figcap">그림 4 · 하이브리드 검색(Dense+Sparse RRF) — Chroma·Qdrant 양쪽에서 동일 패턴으로 매핑 가능</div>
+    </div>
+
+    <table>
+      <tr><th>도구</th><th>Chroma 기존</th><th>Qdrant 대응</th></tr>
+      <tr><td><code>SearchCorpusTool</code></td><td><code>Rrf(Knn dense + Knn bm25)</code></td><td>Query API <code>prefetch</code> + <code>fusion=RRF</code></td></tr>
+      <tr><td><code>GrepCorpusTool</code></td><td><code>Key.DOCUMENT.regex()</code></td><td>full-text <code>match</code> (⚠️ 정규식 제약)</td></tr>
+      <tr><td><code>ReadDocumentTool</code></td><td>ID로 <code>get</code></td><td><code>retrieve</code> by ID</td></tr>
+      <tr><td>클라이언트</td><td><code>config.get_chroma_client()</code></td><td><code>QdrantClient(url, api_key)</code></td></tr>
+    </table>
+
+    <div class="callout danger">
+      <span class="ico">🚧</span>
+      <div>
+        <strong>grep(정규식)이 가장 까다로움</strong> — Chroma는 문서 텍스트에 임의 정규식을 걸지만, Qdrant는 payload
+        full-text <em>부분일치/키워드 match</em>는 되어도 임의 정규식은 네이티브 지원이 약합니다.
+        full-text 인덱스 + match로 우회하거나 scroll+필터로 처리해야 합니다.
+      </div>
+    </div>
+
+    <h3>config.py 추가 예시</h3>
+    <pre><code># harness/config.py
+from qdrant_client import QdrantClient
+
+def get_qdrant_client(self) -> QdrantClient:
+    return QdrantClient(
+        url=self.qdrant_url.get_secret_value(),
+        api_key=self.qdrant_api_key.get_secret_value(),
+    )</code></pre>
+    <p class="muted">※ <code>QDRANT_URL</code>, <code>QDRANT_API_KEY</code>, <code>QDRANT_COLLECTION</code>을 <code>.env.local</code>에 추가.</p>
+
+    <h3>SearchCorpusTool (Qdrant) 핵심 — RRF 하이브리드</h3>
+    <pre><code>from qdrant_client import models
+
+def __call__(self, params, overrides=None):
+    query = params["query"]
+    dense = self.create_embeddings([query])[0]      # ← [2]단계에서 모델 맞춤
+
+    res = self._client.query_points(
+        collection_name=self._collection,
+        prefetch=[
+            models.Prefetch(query=dense, using="dense_vector", limit=self._knn_limit),
+            # 희소(BM25) 벡터를 색인했다면 sparse prefetch 추가 가능
+        ],
+        query=models.FusionQuery(fusion=models.Fusion.RRF),
+        limit=self._search_limit,
+        with_payload=True,
+    ).points
+
+    ids  = [p.id for p in res]
+    docs = [p.payload["text"] for p in res]          # payload 필드명은 색인 스키마에 맞춤
+    # ... 리랭커 / 포맷팅은 기존 로직 재사용 ...</code></pre>
+
+    <div class="callout info">
+      <span class="ico">ℹ️</span>
+      <div>
+        반환 형식(<code>(formatted_string, metadata)</code> 튜플)과 <code>returned_chunk_ids</code> 메타데이터는
+        <strong>기존 Chroma 버전과 동일하게</strong> 맞춰야 에이전트 루프·큐레이션이 그대로 동작합니다.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STEP 2 ============ -->
+  <section id="step2" class="step">
+    <h2><span class="num">2</span> 임베딩 모델 교체</h2>
+    <p>
+      <code>text-embedding-3-small</code>은 고정이 아니라 <span class="path">harness/tools.py:485</span>의
+      <code>create_embeddings</code>에 <strong>하드코딩</strong>돼 있을 뿐입니다(원작자도 "TODO: 필드로 빼자"고 주석). 한 줄 수정으로 변경 가능합니다.
+    </p>
+
+    <!-- ====== EMBEDDING MATCH SVG ====== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 260" role="img" aria-label="쿼리 임베딩과 색인 임베딩 일치">
+        <text x="480" y="28" text-anchor="middle" class="svg-label">철칙: 쿼리 임베딩 모델 = 색인 임베딩 모델</text>
+
+        <!-- OK case -->
+        <text x="240" y="64" text-anchor="middle" class="svg-sub" style="fill:#5ee0a0">✓ 일치 — 같은 벡터 공간</text>
+        <rect x="60" y="80" width="360" height="120" rx="12" fill="#171a23" stroke="#5ee0a0"/>
+        <!-- vectors aligned -->
+        <circle cx="150" cy="140" r="6" fill="#4f9cf9"/><text x="150" y="170" text-anchor="middle" class="svg-small">쿼리</text>
+        <circle cx="200" cy="120" r="6" fill="#c08cf9"/><circle cx="230" cy="155" r="6" fill="#c08cf9"/>
+        <circle cx="265" cy="125" r="6" fill="#c08cf9"/><circle cx="300" cy="150" r="6" fill="#c08cf9"/>
+        <line x1="150" y1="140" x2="200" y2="120" stroke="#5ee0a0" stroke-width="1.5"/>
+        <line x1="150" y1="140" x2="230" y2="155" stroke="#5ee0a0" stroke-width="1.5"/>
+        <text x="340" y="115" text-anchor="middle" class="svg-small" style="fill:#c08cf9">문서</text>
+        <text x="240" y="192" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">정상 검색</text>
+
+        <!-- BAD case -->
+        <text x="720" y="64" text-anchor="middle" class="svg-sub" style="fill:#f06d6d">✗ 불일치 — 다른 공간</text>
+        <rect x="540" y="80" width="360" height="120" rx="12" fill="#171a23" stroke="#f06d6d"/>
+        <circle cx="600" cy="115" r="6" fill="#4f9cf9"/><text x="600" y="105" text-anchor="middle" class="svg-small">쿼리</text>
+        <circle cx="760" cy="165" r="6" fill="#c08cf9"/><circle cx="800" cy="150" r="6" fill="#c08cf9"/>
+        <circle cx="840" cy="175" r="6" fill="#c08cf9"/><circle cx="810" cy="120" r="6" fill="#c08cf9"/>
+        <line x1="600" y1="115" x2="760" y2="165" stroke="#f06d6d" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="720" y="192" text-anchor="middle" class="svg-small" style="fill:#f06d6d">엉뚱한 결과 / 재임베딩 필요</text>
+      </svg>
+      <div class="figcap">그림 5 · 임베딩을 바꿔도 되지만, 쿼리와 색인이 같은 모델이어야 검색이 성립</div>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div>
+        색인이 다른 모델이면 → <em>코퍼스 재임베딩 대신</em> <strong>쿼리 쪽을 색인 모델에 맞추는 것</strong>이 훨씬 저렴합니다(한 줄 수정).
+      </div>
+    </div>
+
+    <h3>케이스별 대응</h3>
+    <table>
+      <tr><th>Qdrant 색인 모델</th><th>해야 할 일</th></tr>
+      <tr><td><code>text-embedding-3-small</code> (1536)</td><td>변경 불필요</td></tr>
+      <tr><td>다른 OpenAI 모델 (예: 3-large 3072)</td><td>485줄 model 문자열만 교체 + 차원 확인</td></tr>
+      <tr><td>로컬/Ollama (예: <code>nomic-embed-text</code> 768)</td><td><code>base_url</code>을 로컬 임베딩 서버로 + model명 교체</td></tr>
+      <tr><td>완전 다른 SDK</td><td><code>create_embeddings</code> 본문 자체를 교체</td></tr>
+    </table>
+
+    <h3>수정 예시 — 로컬/Ollama 임베딩으로</h3>
+    <pre><code># harness/tools.py  (create_embeddings)
+def create_embeddings(self, texts):
+    resp = self._openai_client.embeddings.create(
+        model=self._openai_ef_name,   # 하드코딩 대신 필드 사용
+        input=texts,
+        encoding_format="float",
+    )
+    return [e.embedding for e in resp.data]
+
+# 생성 시:
+#   openai_client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+#   SearchCorpusTool(..., openai_ef_name="nomic-embed-text")</code></pre>
+
+    <div class="callout info">
+      <span class="ico">ℹ️</span>
+      <div>
+        <strong>차원·하이브리드 주의</strong> ① dense 벡터 차원이 새 모델 출력과 일치(3-small=1536 / 3-large=3072 / nomic=768).
+        ② BM25 sparse는 쿼리 시 로컬 계산이라 임베딩 교체와 무관. ③ <code>text-embedding-3-small</code>을 <strong>전체 검색</strong>해
+        다른 도구(<code>ReadDocumentTool</code> 등)도 함께 교체.
+      </div>
+    </div>
+
+    <div class="callout ok">
+      <span class="ico">🎯</span>
+      <div>
+        <strong>벤치마크 충실도</strong> — harness-1 모델은 검색된 <em>텍스트</em>를 읽지 임베딩을 보지 않으므로,
+        임베딩을 바꿔도 에이전트는 정상 동작합니다. 단 검색 품질(recall)이 달라지니, 논문 수치 재현이 목적이면
+        <code>text-embedding-3-small</code> 유지가 공정합니다.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STEP 3 ============ -->
+  <section id="step3" class="step">
+    <h2><span class="num">3</span> 실행 러너 연결</h2>
+    <p>
+      기존 <span class="path">inference/evaluate_harness1_vllm.py</span>는 <strong>데이터셋/qrels 추상화 + Chroma</strong>에
+      강결합돼 있습니다. 목적에 따라 경로가 갈립니다.
+    </p>
+
+    <!-- ====== DECISION TREE SVG ====== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 260" role="img" aria-label="실행 경로 결정">
+        <defs>
+          <marker id="a4" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa3b2"/></marker>
+        </defs>
+        <!-- root -->
+        <rect x="360" y="20" width="240" height="52" rx="12" fill="#1e2230" stroke="#4f9cf9"/>
+        <text x="480" y="42" text-anchor="middle" class="svg-label">목적이 무엇인가?</text>
+        <text x="480" y="60" text-anchor="middle" class="svg-sub">정답 라벨(qrels) 유무</text>
+
+        <!-- branch A -->
+        <rect x="80" y="130" width="340" height="100" rx="12" fill="#171a23" stroke="#f5b86b"/>
+        <text x="250" y="158" text-anchor="middle" class="svg-label" style="fill:#f5b86b">(A) 벤치마크 재현</text>
+        <text x="250" y="180" text-anchor="middle" class="svg-small">qrels 필요 · 문서ID 매칭 필수</text>
+        <text x="250" y="200" text-anchor="middle" class="svg-sub">→ Chroma 재적재가 더 적합</text>
+        <text x="250" y="218" text-anchor="middle" class="svg-small">evaluate_harness1_vllm.py 사용</text>
+
+        <!-- branch B -->
+        <rect x="540" y="130" width="340" height="100" rx="12" fill="#171a23" stroke="#5ee0a0"/>
+        <text x="710" y="158" text-anchor="middle" class="svg-label" style="fill:#5ee0a0">(B) 내 Qdrant 문서 활용</text>
+        <text x="710" y="180" text-anchor="middle" class="svg-small">qrels 없음 · metric 대신 trajectory</text>
+        <text x="710" y="200" text-anchor="middle" class="svg-sub">→ 커스텀 드라이버 신설</text>
+        <text x="710" y="218" text-anchor="middle" class="svg-small">run_qdrant_agent.py</text>
+
+        <!-- arrows -->
+        <line x1="430" y1="72" x2="250" y2="128" stroke="#9aa3b2" stroke-width="2" marker-end="url(#a4)"/>
+        <line x1="530" y1="72" x2="710" y2="128" stroke="#9aa3b2" stroke-width="2" marker-end="url(#a4)"/>
+        <text x="320" y="105" text-anchor="middle" class="svg-small" style="fill:#f5b86b">라벨 있음</text>
+        <text x="650" y="105" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">라벨 없음</text>
+      </svg>
+      <div class="figcap">그림 6 · 실행 경로 결정 — Qdrant 자체 컬렉션 흐름이면 거의 (B)</div>
+    </div>
+
+    <h3>커스텀 드라이버 골격 (run_qdrant_agent.py)</h3>
+    <pre><code>import asyncio, tiktoken
+from openai import OpenAI
+from harness.config import get_config
+from harness.tools import ToolSet, PruneChunksTool
+from harness.tools_qdrant import (   # [1]단계에서 만든 Qdrant 어댑터
+    QdrantSearchCorpusTool, QdrantGrepCorpusTool, QdrantReadDocumentTool,
+)
+# 모델 호출은 evaluate_harness1_vllm.py 의 VllmTokenCompleter 재사용
+
+async def main(query_text: str):
+    cfg = get_config()
+    enc = tiktoken.get_encoding("o200k_harmony")
+    counter = lambda t: len(enc.encode(t))
+
+    qdrant = cfg.get_qdrant_client()
+    emb = OpenAI(base_url="http://localhost:11434/v1", api_key="x")  # 임베딩 서버
+
+    search = QdrantSearchCorpusTool(qdrant, emb, "내_컬렉션명",
+                                    openai_ef_name="nomic-embed-text")
+    toolset = ToolSet(name="qdrant_toolset")
+    toolset.add_tool(search)
+    toolset.add_tool(QdrantGrepCorpusTool(qdrant, "내_컬렉션명", counter))
+    toolset.add_tool(QdrantReadDocumentTool(qdrant, "내_컬렉션명", counter))
+    toolset.add_tool(PruneChunksTool())
+
+    # SlidingWindowSearchEnv + VllmTokenCompleter 로 에이전트 루프 구동
+    # (evaluate_harness1_vllm.py 의 run_single_episode 패턴 참고)
+    ...
+
+asyncio.run(main("내 질문 내용"))</code></pre>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div>
+        <code>SlidingWindowSearchEnv</code>는 <code>dataset</code> 객체로 질의·정답을 받습니다. 자체 문서 경로(B)에서는
+        최소한의 <code>dataset</code> 스텁(질의 텍스트만 반환, qrels는 빈 값)이 필요하거나, 환경을 우회하는 더 단순한
+        루프를 직접 구성해야 합니다. 이 부분은 실제 구현 시 함께 설계합니다.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STEP 4 ============ -->
+  <section id="step4" class="step">
+    <h2><span class="num">4</span> 에이전트 실행</h2>
+
+    <!-- ====== AGENT LOOP SVG ====== -->
+    <div class="fig">
+      <svg viewBox="0 0 960 230" role="img" aria-label="에이전트 턴 루프">
+        <defs>
+          <marker id="a5" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5ee0a0"/></marker>
+        </defs>
+        <!-- nodes in a loop -->
+        <rect x="40"  y="90" width="130" height="50" rx="10" fill="#1e2230" stroke="#2a2f3d"/><text x="105" y="120" text-anchor="middle" class="svg-small" style="fill:#e6e9ef">질의 수신</text>
+        <rect x="230" y="90" width="130" height="50" rx="10" fill="#171a23" stroke="#4f9cf9"/><text x="295" y="113" text-anchor="middle" class="svg-small" style="fill:#e6e9ef">검색 / grep</text><text x="295" y="130" text-anchor="middle" class="svg-sub">Qdrant</text>
+        <rect x="420" y="90" width="130" height="50" rx="10" fill="#171a23" stroke="#c08cf9"/><text x="485" y="113" text-anchor="middle" class="svg-small" style="fill:#e6e9ef">문서 읽기</text><text x="485" y="130" text-anchor="middle" class="svg-sub">read</text>
+        <rect x="610" y="90" width="130" height="50" rx="10" fill="#171a23" stroke="#f5b86b"/><text x="675" y="113" text-anchor="middle" class="svg-small" style="fill:#e6e9ef">큐레이션 / 검증</text><text x="675" y="130" text-anchor="middle" class="svg-sub">curate</text>
+        <rect x="800" y="90" width="130" height="50" rx="10" fill="#1e2230" stroke="#5ee0a0"/><text x="865" y="120" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">증거 / 종료</text>
+
+        <line x1="170" y1="115" x2="228" y2="115" stroke="#5ee0a0" stroke-width="2" marker-end="url(#a5)"/>
+        <line x1="360" y1="115" x2="418" y2="115" stroke="#5ee0a0" stroke-width="2" marker-end="url(#a5)"/>
+        <line x1="550" y1="115" x2="608" y2="115" stroke="#5ee0a0" stroke-width="2" marker-end="url(#a5)"/>
+        <line x1="740" y1="115" x2="798" y2="115" stroke="#5ee0a0" stroke-width="2" marker-end="url(#a5)"/>
+        <!-- loop back -->
+        <path d="M675,140 L675,190 L295,190 L295,142" fill="none" stroke="#5ee0a0" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#a5)"/>
+        <text x="485" y="183" text-anchor="middle" class="svg-small" style="fill:#5ee0a0">최대 MAX_TURNS 회 반복 (매 턴 모델 호출 → 도구 호출)</text>
+      </svg>
+      <div class="figcap">그림 7 · 에이전트 턴 루프 — 검색·읽기·큐레이션을 반복하며 증거를 모으고 종료</div>
+    </div>
+
+    <h3>동작 플래그 (Harness-1 operating point)</h3>
+    <pre><code>set -a && source .env.local && set +a   # QDRANT_*, 임베딩 서버 등
+
+export V8D_SUBTRACTIVE_CURATION=1 V8D_IMPORTANCE_TAGGING=1 \
+       V8D_AUTO_POPULATE_FIRST_SEARCH=1 V8D_EVIDENCE_GRAPH=1 \
+       V8D_SENTENCE_COMPRESS=1 V8D_CONTENT_DEDUP=1 V8D_VERIFY_TOOL=1 \
+       V8D_TOKEN_BUDGET_MARKER=1 MAX_TURNS=35 PYTHONPATH=.</code></pre>
+
+    <h3>실행</h3>
+    <pre><code># (B) 커스텀 드라이버
+PYTHONPATH=. uv run python run_qdrant_agent.py
+
+# (A) 벤치 재현 (Chroma 재적재한 경우)
+PYTHONPATH=. uv run python inference/evaluate_harness1_vllm.py \
+  --dataset browsecompplus --split test --n-queries 1 \
+  --max-turns 40 --temperature 1.0 \
+  --base-url http://127.0.0.1:8000/v1 --model harness-1 \
+  --reranker none --output tmp/agent_run.json</code></pre>
+
+    <p>
+      실행되면 에이전트가 위 루프를 돌고 trajectory가 저장됩니다.
+      <code>SAVE_FULL_TRAJECTORIES=1</code>을 주면 매 턴의 tool call·관찰이 JSON으로 남습니다.
+    </p>
+  </section>
+
+  <!-- ============ NOTES ============ -->
+  <section id="notes">
+    <h2>주의사항 &amp; 트러블슈팅</h2>
+    <table>
+      <tr><th>증상</th><th>원인 / 해결</th></tr>
+      <tr><td><code>does not support GptOssForCausalLM</code></td><td>vLLM 구버전. GPT-OSS 지원 빌드(0.20.2+) 사용</td></tr>
+      <tr><td>FlashInfer CUTLASS / nvcc 오류</td><td><code>--moe-backend triton</code> 사용</td></tr>
+      <tr><td>DeepGEMM 관련 오류</td><td><code>VLLM_USE_DEEP_GEMM=0 VLLM_MOE_USE_DEEP_GEMM=0</code></td></tr>
+      <tr><td>검색 결과가 엉뚱함</td><td>쿼리 임베딩 ≠ 색인 임베딩(그림 5). 모델/차원 일치 확인</td></tr>
+      <tr><td>grep이 기대대로 안 됨</td><td>Qdrant 정규식 제약. full-text match로 우회(1단계)</td></tr>
+      <tr><td>토큰 ID 미반환</td><td>vLLM 전용 <code>return_token_ids</code>. Ollama 텍스트 API로는 토큰 경로 불가</td></tr>
+    </table>
+
+    <div class="callout info">
+      <span class="ico">📌</span>
+      <div>
+        <strong>토큰 ID 프로토콜은 vLLM/Tinker 전용</strong>입니다. Ollama 등 텍스트 API로 가려면 토큰 경로가 아니라
+        <code>OpenAIAgentInferenceModel</code>(chat_completions)을 통한 텍스트 경로로 우회해야 하며, 토큰 단위
+        충실 재현은 보장되지 않습니다.
+      </div>
+    </div>
+
+    <h3>핵심 파일 위치</h3>
+    <table>
+      <tr><th>역할</th><th>경로</th></tr>
+      <tr><td>검색 도구 (수정 대상)</td><td><span class="path">harness/tools.py</span></td></tr>
+      <tr><td>클라이언트 설정 (수정 대상)</td><td><span class="path">harness/config.py</span></td></tr>
+      <tr><td>에이전트 추상화</td><td><span class="path">harness/agent.py</span></td></tr>
+      <tr><td>실행 러너 (참고/우회)</td><td><span class="path">inference/evaluate_harness1_vllm.py</span></td></tr>
+      <tr><td>vLLM 공식 런북</td><td><span class="path">docs/run_vllm_browsecompplus.md</span></td></tr>
+    </table>
+  </section>
+
+  <footer>
+    Harness-1 구동 절차 가이드 · 생성 2026-06-17 · 프로젝트:
+    <span class="path">E:\04.개발환경\python\03.harness_1_Agent\harness-1</span>
+  </footer>
+
+</div>
+</body>
+</html>

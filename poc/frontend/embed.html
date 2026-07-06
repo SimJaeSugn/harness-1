@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>벡터스토어 검색</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --tx:#e6e8ee; --dim:#9aa3b2; --green:#3fb950; --yellow:#d6a531; --blue:#4d8af0; --red:#e5534b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font-family:Pretendard,system-ui,sans-serif;font-size:14px;line-height:1.5}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .diamond{width:14px;height:14px;background:var(--blue);transform:rotate(45deg);border-radius:3px}
+  h1{font-size:16px;margin:0;font-weight:700}
+  .sub{color:var(--dim);font-size:12px;font-weight:400}
+  .wrap{padding:18px 22px;max-width:980px;margin:0 auto}
+  form{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  input[type=text]{flex:1;min-width:280px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--tx);padding:11px 13px;border-radius:9px;font-size:14px;font-family:inherit}
+  input[type=number]{width:70px;background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+    padding:10px;border-radius:9px;font-family:inherit}
+  label.chk{display:flex;align-items:center;gap:6px;color:var(--dim);user-select:none}
+  button{background:var(--blue);border:0;color:#fff;padding:11px 22px;border-radius:9px;
+    font-weight:700;cursor:pointer;font-family:inherit}
+  button:disabled{opacity:.55;cursor:default}
+  .meta{color:var(--dim);font-size:12px;margin:6px 0 14px}
+  .pill{display:inline-block;padding:1px 9px;border-radius:20px;font-size:11px;font-weight:700;margin-left:6px}
+  .pill.h{background:var(--green);color:#04210c}
+  .pill.d{background:var(--yellow);color:#231a02}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 15px}
+  .ctop{display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+  .rank{font-weight:700;color:var(--dim);min-width:22px}
+  .score{font-variant-numeric:tabular-nums;color:var(--blue);font-size:12.5px}
+  .file{font-size:13px;color:var(--tx);word-break:break-all;flex:1}
+  .ids{color:var(--dim);font-size:11px;margin-top:2px;word-break:break-all}
+  .snip{color:var(--dim);font-size:12.5px;margin-top:6px;white-space:pre-wrap}
+  .err{color:var(--red);padding:10px 0}
+  .spin{color:var(--dim)}
+  details.pl{margin-top:8px}
+  details.pl>summary{cursor:pointer;color:var(--blue);font-size:12px;user-select:none;list-style:none}
+  details.pl>summary::-webkit-details-marker{display:none}
+  details.pl>summary::before{content:"▸ ";}
+  details.pl[open]>summary::before{content:"▾ ";}
+  table.pl{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+  table.pl td{border:1px solid var(--line);padding:5px 8px;vertical-align:top}
+  table.pl td.k{color:var(--blue);white-space:nowrap;width:1%;font-weight:600;background:var(--panel2)}
+  table.pl td.v{color:var(--tx);word-break:break-word;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+  <span class="diamond"></span>
+  <h1>벡터스토어 검색 <span class="sub" id="hsub"></span></h1>
+</header>
+
+<div class="wrap">
+  <form id="f">
+    <input type="text" id="q" placeholder="질의를 입력하세요  ·  예) 학교 급식 식재료 보관 온도 기준" autocomplete="off">
+    <input type="number" id="k" value="10" min="1" max="50" title="상위 N건">
+    <label class="chk"><input type="checkbox" id="hy" checked> hybrid</label>
+    <label class="chk"><input type="checkbox" id="rr"> rerank</label>
+    <button id="go" type="submit">검색</button>
+  </form>
+  <div class="meta" id="meta"></div>
+  <div class="list" id="list"></div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+// 이 페이지가 서빙된 경로(/v1/embed 또는 /v2/embed)로 그대로 POST → 버전 자동 일치
+const API = location.pathname.replace(/\/+$/,"");
+$("#hsub").textContent = API;
+
+function payloadHtml(pl){
+  pl = pl || {};
+  const keys = Object.keys(pl);
+  if (!keys.length) return "";
+  const rows = keys.map(k => {
+    let v = pl[k];
+    if (v && typeof v === "object") v = JSON.stringify(v);
+    return `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`;
+  }).join("");
+  return `<details class="pl"><summary>payload (${keys.length} fields)</summary>
+    <table class="pl">${rows}</table></details>`;
+}
+
+function render(d){
+  const mode = d.mode || "dense";
+  $("#meta").innerHTML =
+    `컬렉션: <b>${esc(d.collection)}</b> @ ${esc(d.qdrant_url)} · ${d.count}건` +
+    `<span class="pill ${mode==='hybrid'?'h':'d'}">${mode}${mode==='hybrid'&&d.sparse_vector?(' · '+esc(d.sparse_vector)):''}</span>` +
+    (d.reranked ? `<span class="pill d">reranked</span>` : "");
+  $("#list").innerHTML = (d.results||[]).map(r => `
+    <div class="card">
+      <div class="ctop">
+        <span class="rank">${r.rank}</span>
+        <span class="score">${r.score}</span>
+        <span class="file">${esc(r.file_name) || '<span style="color:var(--dim)">(파일명 없음)</span>'}${r.page_no?` <span class="score">p${esc(r.page_no)}</span>`:''}</span>
+      </div>
+      <div class="ids">doc_id=${esc(r.doc_id)} · chunk_id=${esc(r.chunk_id)}</div>
+      <div class="snip">${esc(r.snippet||"")}</div>
+      ${payloadHtml(r.payload)}
+    </div>`).join("") || `<div class="meta">결과가 없습니다.</div>`;
+}
+
+async function run(ev){
+  ev && ev.preventDefault();
+  const query = $("#q").value.trim();
+  if (!query) return;
+  $("#go").disabled = true;
+  $("#meta").innerHTML = `<span class="spin">검색 중… (첫 질의는 임베딩 모델 로드로 수십 초 걸릴 수 있습니다)</span>`;
+  $("#list").innerHTML = "";
+  try{
+    const resp = await fetch(API, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ query, limit:+$("#k").value||10, hybrid:$("#hy").checked, rerank:$("#rr").checked })
+    });
+    if (!resp.ok) throw new Error("서버 오류 ("+resp.status+")");
+    render(await resp.json());
+  }catch(e){
+    $("#meta").innerHTML = `<div class="err">⚠ ${esc(e.message||e)}</div>`;
+  }finally{
+    $("#go").disabled = false;
+  }
+}
+$("#f").addEventListener("submit", run);
+</script>
+</body>
+</html>

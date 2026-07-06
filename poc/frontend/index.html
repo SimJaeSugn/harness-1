@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>아리아 RAG · harness-1</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- LEFT RAIL -->
+  <aside class="rail" id="rail">
+    <div class="brand">
+      <div class="brand-logo"><div class="brand-diamond"></div></div>
+      <div class="brand-text">
+        <div class="brand-title">아리아 RAG</div>
+        <div class="brand-sub">harness-1 검색 시스템</div>
+      </div>
+    </div>
+
+    <button class="new-btn" id="newSession">
+      <span class="plus">+</span> 새 질문 시작
+    </button>
+
+    <div class="rail-label">최근 질문</div>
+    <div class="recents" id="recents"></div>
+
+    <div class="rail-foot">
+      <div class="avatar">김</div>
+      <div>
+        <div class="foot-name">김도윤</div>
+        <div class="foot-role">데이터팀 · 분석가</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger" id="toggleRail" title="사이드바 토글">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="workspace">워크스페이스 · BrowseComp 코퍼스</div>
+      </div>
+      <div class="agent-status" id="agentStatus">
+        <span class="dot"></span> <span id="agentStatusText">에이전트 대기 중</span>
+      </div>
+    </header>
+
+    <div class="scroll" id="scroll">
+      <!-- EMPTY STATE -->
+      <div class="empty" id="empty">
+        <div class="empty-head">
+          <div>
+            <div class="empty-date" id="greetDate"></div>
+            <h1 class="empty-title">무엇을 찾아드릴까요?</h1>
+          </div>
+          <div class="badge-agent"><span class="diamond-sm"></span> harness-1 자동 검색</div>
+        </div>
+
+        <div class="pipeline-card">
+          <div class="pipeline-title">검색 파이프라인</div>
+          <div class="pipeline-row" id="pipelineRow">
+            <div class="pipe"><span class="pipe-k">질의 임베딩</span><span class="pipe-v">qwen3-embedding</span></div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe"><span class="pipe-k">벡터 검색</span><span class="pipe-v">Qdrant</span></div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe"><span class="pipe-k">재정렬</span><span class="pipe-v">Qwen3-Reranker</span></div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe"><span class="pipe-k">문서 랭킹</span><span class="pipe-v">harness-1</span></div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe"><span class="pipe-k">답변 합성</span><span class="pipe-v">exaone3.5</span></div>
+          </div>
+        </div>
+
+        <div class="prompt-label">예시 질문을 눌러 바로 검색해 보세요</div>
+        <div class="chips-grid" id="exampleChips"></div>
+      </div>
+
+      <!-- CONVERSATION -->
+      <div class="conv" id="conv"></div>
+    </div>
+
+    <!-- COMPOSER -->
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="input" rows="1" placeholder="코퍼스에 대해 무엇이든 물어보세요  ·  예) What is the capital of China?"></textarea>
+        <button id="send" class="send-btn"><span>↑</span></button>
+      </div>
+      <div class="composer-note">아리아는 harness-1로 코퍼스를 검색하고 exaone3.5로 출처 기반 답변을 생성합니다.</div>
+    </div>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

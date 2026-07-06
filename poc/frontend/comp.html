@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>검색 비교 · hybrid vs dense</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --tx:#e6e8ee; --dim:#9aa3b2; --green:#3fb950; --greenbg:#13351c;
+    --yellow:#d6a531; --yellowbg:#3a2f12; --blue:#4d8af0; --red:#e5534b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font-family:Pretendard,system-ui,sans-serif;font-size:14px;line-height:1.5}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;gap:12px;flex-wrap:wrap}
+  .diamond{width:14px;height:14px;background:var(--blue);transform:rotate(45deg);border-radius:3px}
+  h1{font-size:16px;margin:0;font-weight:700}
+  .sub{color:var(--dim);font-size:12px}
+  .wrap{padding:18px 22px;max-width:1280px;margin:0 auto}
+  form{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  input[type=text]{flex:1;min-width:280px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--tx);padding:11px 13px;border-radius:9px;font-size:14px;font-family:inherit}
+  select,input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+    padding:10px;border-radius:9px;font-family:inherit}
+  input[type=number]{width:70px}
+  label.chk{display:flex;align-items:center;gap:6px;color:var(--dim);user-select:none}
+  button{background:var(--blue);border:0;color:#fff;padding:11px 20px;border-radius:9px;
+    font-weight:700;cursor:pointer;font-family:inherit}
+  button:disabled{opacity:.55;cursor:default}
+  .meta{color:var(--dim);font-size:12px;margin:4px 0 14px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 16px;color:var(--dim);font-size:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.cols{grid-template-columns:1fr}}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .col h2{margin:0;padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center}
+  .tag{font-size:11px;color:var(--dim);font-weight:500}
+  .row{padding:11px 14px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row.onlyH{background:var(--greenbg)}
+  .row.onlyD{background:var(--yellowbg)}
+  .rtop{display:flex;gap:8px;align-items:baseline}
+  .rank{font-weight:700;min-width:22px;color:var(--dim)}
+  .score{font-variant-numeric:tabular-nums;color:var(--blue);font-size:12.5px}
+  .file{font-size:12.5px;color:var(--tx);word-break:break-all}
+  .badge{font-size:10.5px;padding:1px 6px;border-radius:20px;margin-left:6px;font-weight:700}
+  .badge.h{background:var(--green);color:#04210c}
+  .badge.d{background:var(--yellow);color:#231a02}
+  .mv{font-size:11px;margin-left:6px}
+  .mv.up{color:var(--green)} .mv.down{color:var(--red)}
+  .snip{color:var(--dim);font-size:12px;margin-top:4px}
+  .summary{background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin-bottom:16px}
+  .summary b{color:var(--tx)}
+  .err{color:var(--red);padding:10px 0}
+  .spin{color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <span class="diamond"></span>
+  <div>
+    <h1>검색 품질 비교 <span class="sub">hybrid (dense+sparse, RRF) vs dense-only</span></h1>
+  </div>
+</header>
+
+<div class="wrap">
+  <form id="f">
+    <input type="text" id="q" placeholder="질의를 입력하세요  ·  예) 학교 급식 식재료 보관 온도 기준" autocomplete="off">
+    <select id="ver" title="비교 대상 백엔드">
+      <option value="v2">v2 · kb_bsss</option>
+      <option value="v1">v1 · browsecomp</option>
+    </select>
+    <input type="number" id="k" value="8" min="1" max="50" title="상위 N건">
+    <label class="chk"><input type="checkbox" id="rr"> rerank</label>
+    <button id="go" type="submit">비교</button>
+  </form>
+  <div class="meta" id="meta"></div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--greenbg);border:1px solid var(--green)"></i> 하이브리드 단독(=sparse 기여)</span>
+    <span><i class="sw" style="background:var(--yellowbg);border:1px solid var(--yellow)"></i> dense 단독</span>
+    <span><i class="mv up">▲</i>/<i class="mv down">▼</i> 공통 문서 순위 변화</span>
+  </div>
+
+  <div id="summary"></div>
+  <div class="cols">
+    <div class="col"><h2>dense-only <span class="tag" id="tagD"></span></h2><div id="dense"></div></div>
+    <div class="col"><h2>hybrid (RRF) <span class="tag" id="tagH"></span></h2><div id="hybrid"></div></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const keyOf = r => r.chunk_id || r.doc_id || "";
+const label = r => {
+  const fn = r.file_name || "";
+  if (fn) return esc(fn) + (r.page_no ? ` <span class="tag">p${esc(r.page_no)}</span>` : "");
+  return `<span class="tag">${esc(r.chunk_id || r.doc_id || "?")}</span>`;
+};
+
+function render(data){
+  const D = data.dense.results, H = data.hybrid.results;
+  const dKeys = D.map(keyOf), hKeys = H.map(keyOf);
+  const dSet = new Set(dKeys), hSet = new Set(hKeys);
+
+  $("#meta").textContent =
+    `컬렉션: ${data.collection} @ ${data.qdrant_url}  ·  rerank=${data.rerank}` +
+    (data.hybrid_available ? "" : "  ⚠ 이 버전은 sparse 비활성 → hybrid가 dense로 폴백됨");
+  $("#tagD").textContent = `${data.dense.mode} · ${D.length}건`;
+  $("#tagH").textContent = `${data.hybrid.mode} · ${H.length}건`;
+
+  // 순위 변화 맵 (공통 문서)
+  const moveOf = (k, list) => list.indexOf(k) + 1;
+
+  function rowHtml(r, list, otherSet, cls){
+    const k = keyOf(r);
+    let badge = "", mv = "";
+    if (!otherSet.has(k)) badge = ` <span class="badge ${cls==='onlyH'?'h':'d'}">${cls==='onlyH'?'+sparse':'dense'}</span>`;
+    else {
+      const dr = moveOf(k, dKeys), hr = moveOf(k, hKeys);
+      if (dr !== hr){
+        const up = hr < dr;
+        mv = ` <span class="mv ${up?'up':'down'}">${up?'▲':'▼'}${dr}→${hr}</span>`;
+      }
+    }
+    return `<div class="row ${cls}">
+      <div class="rtop"><span class="rank">${r.rank}</span>
+        <span class="score">${r.score}</span>
+        <span class="file">${label(r)}${badge}${mv}</span></div>
+      <div class="snip">${esc((r.snippet||"").replace(/\n/g," ").slice(0,160))}</div>
+    </div>`;
+  }
+
+  $("#dense").innerHTML = D.map(r => rowHtml(r, dKeys, hSet, hSet.has(keyOf(r))?"":"onlyD")).join("");
+  $("#hybrid").innerHTML = H.map(r => rowHtml(r, hKeys, dSet, dSet.has(keyOf(r))?"":"onlyH")).join("");
+
+  const common = [...dSet].filter(k => hSet.has(k)).length;
+  const onlyH = H.filter(r => !dSet.has(keyOf(r))).length;
+  const onlyD = D.filter(r => !hSet.has(keyOf(r))).length;
+  $("#summary").innerHTML =
+    `<div class="summary">상위 ${Math.max(D.length,H.length)}건 비교 — ` +
+    `공통 <b>${common}</b>건 · 하이브리드 단독 <b style="color:var(--green)">${onlyH}</b>건 · ` +
+    `dense 단독 <b style="color:var(--yellow)">${onlyD}</b>건</div>`;
+}
+
+async function run(ev){
+  ev && ev.preventDefault();
+  const query = $("#q").value.trim();
+  if (!query) return;
+  $("#go").disabled = true;
+  $("#summary").innerHTML = `<div class="spin">검색 중… (첫 질의는 임베딩 모델 로드로 수십 초 걸릴 수 있습니다)</div>`;
+  $("#dense").innerHTML = $("#hybrid").innerHTML = "";
+  try{
+    const resp = await fetch("/v2/comp", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ query, k:+$("#k").value||8, rerank:$("#rr").checked, version:$("#ver").value })
+    });
+    if (!resp.ok) throw new Error("서버 오류 ("+resp.status+")");
+    render(await resp.json());
+  }catch(e){
+    $("#summary").innerHTML = `<div class="err">⚠ ${esc(e.message||e)}</div>`;
+  }finally{
+    $("#go").disabled = false;
+  }
+}
+$("#f").addEventListener("submit", run);
+</script>
+</body>
+</html>

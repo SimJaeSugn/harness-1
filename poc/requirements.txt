@@ -1,0 +1,15 @@
+# 아리아 RAG POC 백엔드 의존성
+fastapi>=0.115.0
+uvicorn>=0.30.0
+openai>=2.6.1
+qdrant-client>=1.12.0
+requests>=2.32.0
+python-dotenv>=1.0.0
+pydantic>=2.9.0
+# 로컬 임베딩(BAAI/bge-m3) — EMBED_BACKEND=local_bge_m3 사용 시
+sentence-transformers>=3.0.0
+# 하이브리드 검색(dense+sparse)
+#  - fastembed: v1 BM25 sparse 쿼리 인코더 (Qdrant/bm25)
+#  - FlagEmbedding: v2 bge-m3 dense+sparse(lexical weights) 인코더
+fastembed>=0.3.0
+FlagEmbedding>=1.2.10

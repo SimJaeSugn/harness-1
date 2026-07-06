@@ -14,6 +14,20 @@ evidence is sufficient.
 
 ![Harness-1 average search performance](assets/teaser_recall_barchart.png)
 
+## GitHub Repository
+
+This project is hosted on GitHub:
+
+```text
+https://github.com/SimJaeSugn/harness-1
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/SimJaeSugn/harness-1.git
+```
+
 ## Quickstart
 
 For a minimal local smoke test, you need:

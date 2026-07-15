@@ -28,7 +28,7 @@ harness-1 (검색 서브에이전트)          ── search_corpus/read_documen
 | 역할 | 모델 | URL |
 |------|------|-----|
 | 검색 모델 | harness-1 | http://192.168.1.108:8000/v1 |
-| 임베딩 | qwen3-embedding (1024d) | http://192.168.1.108:8001/v1 |
+| 임베딩 | qwen3-embedding (1024d) | http://192.168.1.108:8081/v1 |
 | 리랭커 | Qwen/Qwen3-Reranker-8B | http://192.168.1.108:8003/score |
 | 오케스트레이터 | exaone3.5:32b (Ollama) | http://192.168.1.108:11434/v1 |
 | 벡터스토어 | Qdrant | http://192.168.1.10:6333 |
